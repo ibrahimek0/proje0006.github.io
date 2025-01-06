@@ -1,0 +1,445 @@
+---
+title: "ödev2"
+---
+
+# FİNAL
+
+# AMES
+
+# GİRİŞ
+
+Bu ödev konut piyasası ile ilgili verilere dayanmaktadır. Keşifsel bir veri analizi ile başlayacağım, ilgilendiğim bazı değişkenleri grafikler üzerinde sunacağım ve dağılımlarını inceleyeceğim. Ödevin ikinci bölümünde, korelasyon ve regresyon analizi yaparak çoklu regresyon modeli oluşturmaya ve modelde mevcut olan sorunları düzeltmeye çalışacağım. Amacım, konut fiyatlarını tahmin etmek için en iyi doğrusal modeli bulmak.
+
+```{r}
+library(AmesHousing)
+```
+
+```{r}
+ames <- AmesHousing::make_ames()
+```
+
+Veri seti, Ames, Iowa’daki evlerin farklı özelliklerini temsil eden 82 değişkene ait 2930 gözlem içermektedir. Veri dokümantasyonundan, şu değişkenlerin olduğu anlaşılmaktadır: 23 nominal, 23 ordinal, 14 kesikli ve 20 sürekli değişken.
+
+Bu analizi yapmanın en iyi yolu, diğer özelliklere bağlı olması gerektiği için konut fiyatını tahmin edilen değişken olarak kullanmak gibi görünüyor. Benim varsayımım, mahalle, evin büyüklüğü, durumu ve ek özelliklerin nihai fiyatı etkilemesi gerektiği yönünde olacaktır.
+
+Bu nedenle, keşifsel veri analizine ev fiyatlarının dağılımına bakarak başlayacağım.
+
+```{r}
+library(scales)
+```
+
+```{r}
+library(ggplot2)
+# Fiyatlarin histogrami
+ggplot(ames, aes(x = Sale_Price)) +
+  geom_histogram(color = "black", fill = "lightslateblue", bins = 50) + 
+  scale_x_continuous(labels = comma) +
+  labs(title = "Ev fiyatlarinin dagilimi", x = "FIyat", y = "Frequency") +
+  theme_minimal()
+```
+
+Analiz sürecinde verilerin dağılım şekillerini tanımak önemlidir. Histogramlar, görsel olarak temsil edilen dağılımı görmeye yardımcı olur. Histogramlar, belirli sayıda kutu için veri noktalarının frekanslarını gösterir (Bluman, 2018).
+
+Ev fiyatlarının dağılımı sağa çarpıktır ve çoğu ev 200.000 $’ın altında bir fiyat aralığındadır. Tanımlayıcı istatistiklerden, fiyat aralığının 12789 dolar ile 755000 arasında olduğunu, ortalamanın 180796 ve medyan fiyatın 160.000’e eşit olduğunu biliyorum.
+
+Keşifsel veri analizinin bir sonraki adımı olarak, evlerin yaşına ve kalitesine bakacağım.
+
+```{r}
+barplot(table(ames$Year_Built), 
+        main = "Ne zaman En Cok ev kuruldu?", 
+        xlab = "Yil",
+        ylab = "Ev sayilari")
+```
+
+Görünüşe göre 2000’li yılların başında bir konut patlaması yaşanmış ve tam değerleri görmek için frekans tablosuna baktığımda en fazla konutun 2005 yılında (142 konut) inşa edildiğini, bunu 2008 yılında 138 konutun izlediğini ve daha sonra değerin düşmeye başladığını gördüm. 2007 ve 2008 yılları arasında inşa edilen konut sayısı yarı yarıya azalmıştır ve bunun nedeni büyük olasılıkla finansal krizdir.
+
+```{r}
+barplot(table(ames$Overall_Cond), 
+        main = "Ev ne durumda", 
+        xlab = "Yil",
+        ylab = "Ev sayilari")
+```
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+ames <- ames %>% mutate(Sale_Price = log(Sale_Price))
+```
+
+```{r}
+neighbourhoods = tapply(ames$Sale_Price, ames$Neighborhood, median)
+neighbourhoods = sort(neighbourhoods, decreasing = TRUE)
+
+dotchart(neighbourhoods, pch = 21, bg = "purple1",
+         cex = 0.85,
+         xlab="Evlerin ortalama fiyati",
+         main = "Hangi komşu mahallede evler daha pahali?")
+```
+
+Ortalamayı kullandım çünkü ortalamaya göre aykırı değerlerden daha az etkileniyor (eğer bir milyonun üzerinde bir ev olsaydı, ortalama değer artardı ama orta değer yine aynı kalırdı).
+
+Yukarıdaki grafikten mahallenin ev fiyatlarını etkilediğini görmek mümkün - şehrin en pahalı bölgeleri en ucuz bölgelerinden üç kat daha yüksek fiyatlara sahip
+
+# ANALİZ
+
+korelasyon katsayısı iki değişken arasındaki doğrusal ilişkinin gücünü gösterir. Değerleri -1 ile 1 arasında değişir. -1’e yakın bir değere sahip bir katsayı güçlü bir negatif ilişkiyi, 0’a yakın bir katsayı doğrusal ilişkinin olmadığını ve 1’e yakın bir değere sahip bir katsayı güçlü bir pozitif ilişkiyi gösterir .
+
+Bu veri setindeki değişkenler arasındaki korelasyonu görmek istiyorum
+
+```{r}
+library(GGally)
+```
+
+```{r}
+numeric = ames %>% select(where(is.numeric))
+df1 = numeric %>% select(Sale_Price, Open_Porch_SF, Wood_Deck_SF, Garage_Area, Garage_Cars, Fireplaces, TotRms_AbvGrd, Half_Bath, Full_Bath, Bsmt_Full_Bath, Gr_Liv_Area, Second_Flr_SF, First_Flr_SF, BsmtFin_SF_1, Year_Built, Year_Remod_Add, Lot_Area, Lot_Frontage, Enclosed_Porch)
+ggcorr(df1, size = 3)
+```
+
+Artık değişkenlerin adlarını görmek daha kolay ve hangilerinin bağımlı değişkenle (Sale Price) en güçlü pozitif ve negatif korelasyona sahip olduğunu belirleyebileceğim.
+
+```{r}
+cor(ames$Sale_Price, ames$Gr_Liv_Area)
+```
+
+evin genel kalitesinin fiyatıyla en yüksek pozitif korelasyona sahip olduğu görülmektedir ki bu da mantıklıdır, çünkü ev ne kadar iyi durumdaysa, alıcılar o kadar fazla ödeme yapmaya isteklidir.
+
+Bununla birlikte, sıralı kategorik bir değişkenle bir dağılım grafiği oluşturmak mantıklı olmayacaktır, bu nedenle satış fiyatı ile feet kare cinsinden yer üstü yaşam alanı arasındaki ilişkiyi çizeceğim.
+
+```{r}
+ggplot(ames, aes(Sale_Price, Gr_Liv_Area)) + 
+  geom_point(size = 2, color = "gray35", alpha = 0.6) + 
+  theme_minimal() +
+  geom_smooth(method = lm, color = "blue", size = 2) + 
+  scale_x_continuous(labels = comma)
+```
+
+Dağılım grafikleri, sayısal değişkenlerin sıralı çiftlerini gösterir. Bağımsız ve bağımlı değişkenler arasındaki ilişkiyi (ya da ilişkisizliği) görmeye yardımcı olur. Amaçları, ilgilenilen değişkenler arasındaki ilişkinin doğasını göstermektir.
+
+Şimdi, fiyat arttığında hem yaşam alanının hem de ev kalitesinin de arttığı açıkça görülebilir. Çizgi, yaşam alanı ile konut fiyatı arasındaki ilişkinin doğrusal bir modelini göstermektedir. Ayrıca veri setinde bazı olağandışı gözlemler olduğu da görülebilir.
+
+Noktaların ev kalitesine göre renklendirileceği başka bir dağılım grafiği oluşturacağım
+
+```{r}
+plot(ames$Sale_Price, ames$Gr_Liv_Area, 
+    pch = 21,  cex=1.2,
+    xlab = "Fiyat",
+    ylab = "Yasam alani",
+    main = "Konut fiyatı ve konut kalitesi arasında pozitif doğrusal ilişki",
+    bg = c(rev(heat.colors(10)))[unclass(ames$Overall_Qual)])
+```
+
+Sıralı renk ölçeği kullandım, çünkü tüm ayrı kategorileri görmekle o kadar ilgilenmiyorum, bu nedenle renk koyulaştıkça değerler artıyor.
+
+Şimdi, hangi değişkenin 0,5’e en yakın korelasyon katsayısına sahip olduğunu kontrol edeceğim. Renk aralığında bu değere yakın görünen değişkenleri seçtim ve bazı ayrık veya kategorik değişkenleri eledim.
+
+```{r}
+df1 = numeric %>% select(Sale_Price, Garage_Area, First_Flr_SF, BsmtFin_SF_1, Mas_Vnr_Area, Lot_Frontage)
+
+
+ggcorr(df1, size = 3, label = TRUE, label_size = 4, label_round = 2, label_alpha = TRUE)
+```
+Metrekare cinsinden yığma kaplama alanını temsil eden değişkenin(Mas_Vn_Area) 0,51 korelasyon katsayısına sahip olduğu görülmektedir.
+
+```{r}
+plot(ames$Sale_Price, ames$Mas_Vnr_Area, 
+    pch = 21,  cex=1.2,
+    xlab = "Fiyat",
+    ylab = "Metrekare cinsinden yığma kaplama alanı",
+    main = "Fiyat ile Kaplama alani arasindaki iliski",
+    bg = c("red"))
+```
+
+```{r}
+library(corrplot)
+```
+
+```{r}
+corr_simple <- function(data = ames,sig = 0.5){
+  
+  df_cor <- ames %>% mutate_if(is.character, as.factor)
+  df_cor <- df_cor %>% mutate_if(is.factor, as.numeric)  
+  corr <- cor(df_cor)
+  #prepare to drop duplicates and correlations of 1     
+  corr[lower.tri(corr,diag = TRUE)] <- NA 
+  #drop perfect correlations
+  corr[corr == 1] <- NA   #turn into a 3-column table
+  corr <- as.data.frame(as.table(corr))
+  #remove the NA values from above 
+  corr <- na.omit(corr)   #select significant values  
+  corr <- subset(corr, abs(Freq) > sig) 
+  #sort by highest correlation
+  corr <- corr[order(-abs(corr$Freq)),]   #print table
+  print(corr)  #turn corr back into matrix in order to plot with corrplot
+  mtx_corr <- reshape2::acast(corr, Var1~Var2, value.var="Freq")
+  #plot correlations visually
+  corrplot(mtx_corr, is.corr = FALSE, tl.col="black", na.label=" ")
+}
+
+corr_simple()
+```
+
+Şimdi, doğrusal bir model için değişkenleri seçmek daha kolay olmalı. İlgilendiğim değişkenler arasındaki doğrusal ilişkiyi çizerek başlayacağım:
+
+```{r}
+df2 = ames %>% select(Sale_Price, Garage_Area, First_Flr_SF, Gr_Liv_Area)
+
+# Plot
+pairs(df2, 
+      main = "Veri degiskenleri arasindaki iliski", 
+      pch = 21, 
+      bg = c("royalblue2"), 
+      labels = c("Price","Garage Area","1st Floor Area","Living Area"),
+      lower.panel = NULL, 
+      font.labels = 2, 
+      cex.labels = 2) 
+```
+
+Çizimlerden, 1. kat alanı ile yerden yüksek yaşam alanı (evin çok katlı bir planı varsa, birinci ve ikinci kattaki alanların toplamı olduğuna inanıyorum) arasında doğrusal bir ilişki olabileceği görülüyor, bu nedenle çoklu doğrusal bağlantı olup olmadığını kontrol etmem gerekecek.
+
+Bir ilişkinin anlamlılığını test etmek için dağılım grafikleri çizdikten ve korelasyon katsayılarının değerlerini hesapladıktan sonra, bir sonraki adım regresyon doğrusunun denklemini belirlemek olacaktır
+
+```{r}
+library(explore)
+```
+
+```{r}
+library(tidymodels)
+```
+
+```{r}
+set.seed(725)
+ames_val_split <- initial_validation_split(ames,prop = c(0.7,0.15), strata = Sale_Price)
+```
+
+```{r}
+ames_train <- training(ames_val_split)
+ames_test <- testing(ames_val_split)
+ames_validation <- validation(ames_val_split)
+```
+
+Strata olarak Sale_Price değişkeni kullanıldığında, bu değişkenin dağılımı korunarak veri seti oluşturulur. Böylece eğitim ve test setlerinde Sale_Price oranları sabit kalır. Bu yöntem, dengesiz veri setleriyle çalışırken daha doğru sonuçlar elde edilmesine yardımcı olur.
+
+Model doğrulama (validation), bir modelin gerçek hayatta nasıl performans göstereceğini değerlendirmek için yapılır. Modelin eğitim verileri üzerinde öğrendiklerini, daha önce görmediği yeni veriler üzerinde ne kadar başarılı bir şekilde uygulayabildiği test edilir. Bu süreç, aşırı uyum (overfitting) riskini azaltır ve modelin genel performansını ve genelleme kabiliyetini değerlendirmeyi sağlar.
+
+# MODEL KURMA
+
+# Linear Regression
+
+```{r}
+lm_model <- linear_reg() %>% set_engine("lm")
+```
+
+```{r}
+birinci <- recipe(Sale_Price ~ Gr_Liv_Area + Year_Built+ Overall_Qual + Garage_Area + First_Flr_SF+ Exter_Qual+ Full_Bath, data=ames_train) %>%
+step_log(Gr_Liv_Area, base=10)%>%
+step_dummy(all_nominal_predictors())
+```
+
+```{r}
+lm_workflow <- workflow() %>% add_model(lm_model) %>% add_recipe(birinci)
+```
+
+```{r}
+lm_fit <- fit(lm_workflow, ames_train)
+```
+
+```{r}
+ames_test_hata <- predict(lm_fit, new_data= ames_test %>% select(-Sale_Price))
+```
+
+```{r}
+head(ames_test_hata)
+```
+
+```{r}
+ames_test_hata <- bind_cols(ames_test_hata, ames_test %>% select(Sale_Price))
+```
+
+```{r}
+ggplot(ames_test_hata, aes(Sale_Price,  .pred)) + geom_point() + geom_abline(lty = 2) + coord_obs_pred()
+```
+
+```{r}
+ames_metrics <- metric_set(rmse,rsq,mae)
+```
+
+```{r}
+ames_metrics(ames_test_hata, truth= Sale_Price, estimate = .pred)
+```
+
+# RANDOM FOREST
+
+```{r}
+rf_model <- rand_forest(trees = 500) %>% 
+  set_engine("ranger")%>%
+  set_mode("regression")
+```
+
+```{r}
+rf_workflow <- workflow() %>% add_model(rf_model) %>% add_recipe(birinci)
+```
+
+```{r}
+rf_fit <- rf_workflow %>% fit(data = ames_train)
+```
+
+```{r}
+ames_test_hata <- predict(rf_fit, new_data= ames_test %>% select(-Sale_Price))
+```
+
+```{r}
+head(ames_test_hata)
+```
+
+```{r}
+ames_test_hata <- bind_cols(ames_test_hata, ames_test %>% select(Sale_Price))
+```
+
+```{r}
+head(ames_test_hata)
+```
+
+```{r}
+ggplot(ames_test_hata, aes(Sale_Price,  .pred)) + geom_point() + geom_abline(lty = 2) + coord_obs_pred()
+```
+
+```{r}
+ames_metrics(ames_test_hata, truth= Sale_Price, estimate = .pred)
+```
+
+# SVM
+
+```{r}
+library(parsnip)
+
+svm_model <- svm_rbf(
+  cost = 1,         # Düzenleme parametresi
+  rbf_sigma = NULL, # RBF kernel parametresi (varsayılan olarak otomatik hesaplanır)
+  margin = 0.1      # Sınıf sınırında esneklik
+) %>%
+  set_engine("kernlab") %>%  # SVM motoru olarak 'kernlab' kullanılıyor
+  set_mode("regression")     # Regresyon modu
+```
+
+```{r}
+svm <- workflow() %>% add_model(svm_model) %>% add_recipe(birinci)
+```
+
+```{r}
+svm_fit <- fit(svm, data = ames_train)
+```
+
+```{r}
+ames_test_hata <- predict(svm_fit, new_data= ames_test %>% select(-Sale_Price))
+```
+
+```{r}
+head(ames_test_hata)
+```
+
+```{r}
+ames_test_hata <- bind_cols(ames_test_hata, ames_test %>% select(Sale_Price))
+```
+
+```{r}
+ggplot(ames_test_hata, aes(Sale_Price,  .pred)) + geom_point() + geom_abline(lty = 2) + coord_obs_pred()
+```
+
+```{r}
+ames_metrics(ames_test_hata, truth= Sale_Price, estimate = .pred)
+```
+
+# ARZ VE TALEP FONKSİYONLARI: ÖZET
+
+# Arz Nedir?
+
+Arz, belirli bir dönemde, belirli bir fiyattan üreticilerin piyasaya sunmaya hazır olduğu mal veya hizmet miktarını ifade eder.
+
+Fiyat ile İlişkisi: Üreticiler, fiyatlar yükseldiğinde daha fazla kazanç sağlamak için arz miktarını artırır.
+
+Arz Kanunu: Fiyat yükselirse arz artar, fiyat düşerse arz azalır (diğer tüm faktörler sabit kabul edildiğinde).
+
+# Arz fonksiyonu
+
+Arz fonksiyonu matematiksel olarak şu şekilde ifade edilir: Qs = a + bP
+
+Qₛ: Arz edilen miktar
+
+P: Fiyat
+
+a: Fiyat sıfır olduğunda arz miktarını gösteren sabit terim (genelde 0 veya negatif bir değerdir).
+
+b: Fiyat değişimlerinin arz üzerindeki etkisini ölçen katsayı (pozitiftir, çünkü fiyat arttıkça arz artar).
+
+ÖRNEK:
+
+Bir ürünün arz fonksiyonu:
+
+Qs=10+2PQ_s = 10 + 2PQs​=10+2P
+
+Eğer fiyat 5 ise:
+
+Qs=10+2×5=20Q_s = 10 + 2 = 20Qs​=10+2×5=20
+
+Bu durumda üreticiler, fiyat 5 olduğunda 20 birim ürün sunmaya hazırdır.
+
+# TALEP NEDİR?
+
+Talep, tüketicilerin belirli bir fiyattan satın almak istedikleri mal veya hizmet miktarını ifade eder.
+
+Fiyat ile İlişkisi: Fiyat düştüğünde talep artar, fiyat yükseldiğinde ise talep azalır. Bu ilişki genellikle ters orantılıdır.
+
+TALEP FONKSİYONU: 
+
+Talep fonksiyonu matematiksel olarak şu şekilde ifade edilir: Qd = a - bP
+
+Qₐ: Talep edilen miktar
+
+P: Fiyat
+
+a: Fiyat sıfır olduğunda talep miktarını ifade eden sabit terim.
+
+b: Fiyat değişimlerinin talep üzerindeki etkisini ölçen katsayı (negatiftir, çünkü fiyat arttıkça talep azalır).
+
+ÖRNEK:
+
+Bir ürünün talep fonksiyonu:
+
+Qd=10−PQ_d = 10 - PQd​=10−P
+
+Eğer fiyat 5 ise:
+
+Qd=10−5=5Q_d = 10 - 5 = 5Qd​=10−5=5
+
+Bu durumda tüketiciler, fiyat 5 olduğunda 5 birim ürün satın almak ister.
+
+# TALEP ESNEKLİĞİ NEDİR?
+
+Talep esnekliği, bir malın fiyatındaki değişimlerin talep edilen miktarı nasıl etkilediğini ölçer.
+
+Esnek Talep: Fiyat değişimlerine karşı talep miktarı belirgin şekilde değişir. Örneğin, lüks ürünler (saat, araba).
+
+İnelastik Talep: Fiyat değişimlerine karşı talep miktarı çok az değişir veya hiç değişmez. Örneğin, temel ihtiyaç ürünleri (ekmek, su).
+
+TALEP ESNEKLİĞİ FORMÜLÜ:
+
+Ed = % talep değişimi / % fiyat değişimi
+
+# ARZ ESNEKLİĞİ NEDİR?
+
+Arz esnekliği, bir malın fiyatındaki değişimlerin arz edilen miktarı nasıl etkilediğini ölçer.
+
+Esnek Arz: Fiyat değişimlerine karşı arz miktarı belirgin şekilde değişir.
+
+İnelastik Arz: Fiyat değişimlerine karşı arz miktarı çok az değişir veya hiç değişmez.
+
+ARZ ESNEKLİĞİ FORMÜLÜ: 
+
+Es = % arz değişimi / % fiyat değişimi.
+
+
+
+
